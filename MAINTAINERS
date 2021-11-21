@@ -19146,6 +19146,21 @@ F:	Documentation/networking/device_drivers/cellular/qualcomm/rmnet.rst
 F:	drivers/net/ethernet/qualcomm/rmnet/
 F:	include/linux/if_rmnet.h
 
+QUALCOMM SMBCHG DRIVER
+M:	Yassine Oudjana <y.oudjana@protonmail.com>
+M:	Alejandro Tafalla <atafalla@dnyon.com>
+L:	linux-pm@vger.kernel.org
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/power/supply/qcom,smbchg.yaml
+
+QUALCOMM TEE (QCOMTEE) DRIVER
+M:	Amirreza Zarrabi <amirreza.zarrabi@oss.qualcomm.com>
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	Documentation/tee/qtee.rst
+F:	drivers/tee/qcomtee/
+
 QUALCOMM TRUST ZONE MEMORY ALLOCATOR
 M:	Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
 L:	linux-arm-msm@vger.kernel.org
