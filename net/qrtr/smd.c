@@ -84,7 +84,7 @@ const struct bus_type qrtr_bus = {
 	.probe		= qcom_smd_qrtr_device_probe,
 	.remove		= qcom_smd_qrtr_device_remove,
 };
-EXPORT_SYMBOL_NS_GPL(qrtr_bus, "QRTR");
+EXPORT_SYMBOL_NS_GPL(qrtr_bus, QRTR);
 
 int __qrtr_driver_register(struct qrtr_driver *drv, struct module *owner)
 {
@@ -93,13 +93,13 @@ int __qrtr_driver_register(struct qrtr_driver *drv, struct module *owner)
 
 	return driver_register(&drv->driver);
 }
-EXPORT_SYMBOL_NS_GPL(__qrtr_driver_register, "QRTR");
+EXPORT_SYMBOL_NS_GPL(__qrtr_driver_register, QRTR);
 
 void qrtr_driver_unregister(struct qrtr_driver *drv)
 {
 	driver_unregister(&drv->driver);
 }
-EXPORT_SYMBOL_NS_GPL(qrtr_driver_unregister, "QRTR");
+EXPORT_SYMBOL_NS_GPL(qrtr_driver_unregister, QRTR);
 
 static void qcom_smd_qrtr_dev_release(struct device *dev)
 {

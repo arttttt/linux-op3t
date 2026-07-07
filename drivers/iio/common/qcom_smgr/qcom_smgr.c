@@ -20,7 +20,7 @@
 
 #include "qmi/qmi_sns_smgr.h"
 
-MODULE_IMPORT_NS("QRTR");
+MODULE_IMPORT_NS(QRTR);
 
 #define SMGR_TICKS_PER_SECOND		32768
 #define SMGR_REPORT_RATE_HZ		(SMGR_TICKS_PER_SECOND * 2)
