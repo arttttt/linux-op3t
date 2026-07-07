@@ -1129,7 +1129,7 @@ static int qcom_fg_probe(struct platform_device *pdev)
 	}
 
 	/* Get charger power supply */
-	chip->chg_psy = devm_power_supply_get_by_reference(chip->dev,
+	chip->chg_psy = devm_power_supply_get_by_phandle(chip->dev,
 							"power-supplies");
 	if (IS_ERR(chip->chg_psy)) {
 		ret = PTR_ERR(chip->chg_psy);
