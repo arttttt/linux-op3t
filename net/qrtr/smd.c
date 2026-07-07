@@ -108,10 +108,10 @@ static void qcom_smd_qrtr_dev_release(struct device *dev)
 	kfree(qdev);
 }
 
-static int qcom_smd_qrtr_match_device_by_port(struct device *dev, const void *data)
+static int qcom_smd_qrtr_match_device_by_port(struct device *dev, void *data)
 {
 	struct qrtr_device *qdev = to_qrtr_device(dev);
-	unsigned const int *port = data;
+	unsigned int *port = data;
 
 	return qdev->port == *port;
 }
