@@ -65,7 +65,6 @@
 })
 
 /**
-/**
  * find_closest_smaller - locate the closest smaller element in a sorted array
  * @x: The reference value.
  * @a: The array in which to look for the closest smaller element. Must be
