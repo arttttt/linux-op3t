@@ -8,6 +8,7 @@
 
 #define pr_fmt(fmt) "CPUidle PSCI: " fmt
 
+#include <linux/arm-smccc.h>
 #include <linux/cpuhotplug.h>
 #include <linux/cpu_cooling.h>
 #include <linux/cpuidle.h>
@@ -200,7 +201,47 @@ static __cpuidle int psci_enter_idle_state(struct cpuidle_device *dev,
 	return CPU_PM_CPU_IDLE_ENTER_PARAM_RCU(psci_cpu_suspend_enter, idx, state[idx]);
 }
 
+/*
+ * Qualcomm vendor idle entry.
+ *
+ * msm8996 firmware rejects PSCI_CPU_SUSPEND whenever the power-down StateType
+ * (bit 30) is set: asking for 0x40000004, the value the downstream kernel
+ * composes for a single-CPU collapse, is refused on every single attempt
+ * (observed as a steadily climbing "rejected" count with "usage" stuck at 0).
+ * Only the shallow 0x00000004 is accepted through the standard call.
+ *
+ * Downstream does not go deeper through PSCI either. For its default CPU
+ * power-collapse level it sets "qcom,hyp-psci" in the device tree and issues a
+ * fixed vendor SMC instead of CPU_SUSPEND:
+ *
+ *	__invoke_psci_fn_smc(0xC4000021, 0, 0, 0);
+ *
+ * The function ID sits in the standard secure service range (owner 4, the PSCI
+ * namespace) at function 0x21, past anything the PSCI spec allocates, so it is
+ * a vendor extension serviced by the Qualcomm hypervisor at EL2.
+ *
+ * It takes no arguments and returns to the caller, i.e. the CPU context is
+ * preserved, so there is no entry point to hand over and none of the context
+ * save/restore machinery is needed - it is used exactly like WFI. That also
+ * makes it safe to try: the worst case is a wasted SMC, not a lost core.
+ */
+#define QCOM_HYP_PSCI_CPU_IDLE	0xC4000021
+
+static __cpuidle int psci_enter_hyp_idle_state(struct cpuidle_device *dev,
+					       struct cpuidle_driver *drv,
+					       int idx)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(QCOM_HYP_PSCI_CPU_IDLE, 0, 0, 0, 0, 0, 0, 0, &res);
+
+	return idx;
+}
+
 static const struct of_device_id psci_idle_state_match[] = {
+	/* Must precede the generic entry: these nodes also list arm,idle-state. */
+	{ .compatible = "qcom,idle-state-hyp-psci",
+	  .data = psci_enter_hyp_idle_state },
 	{ .compatible = "arm,idle-state",
 	  .data = psci_enter_idle_state },
 	{ },

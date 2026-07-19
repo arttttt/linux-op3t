@@ -48,7 +48,7 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -67,7 +67,7 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x1>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -81,7 +81,7 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -100,7 +100,7 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -141,6 +141,26 @@
 				entry-latency-us = <130>;
 				exit-latency-us = <80>;
 				min-residency-us = <300>;
+			};
+
+			CPU_SLEEP_1: cpu-sleep-1 {
+				/*
+				 * Deeper collapse reached through the Qualcomm
+				 * vendor SMC rather than CPU_SUSPEND, which this
+				 * firmware refuses for anything with the
+				 * power-down StateType set. The call takes no
+				 * arguments, so the suspend-param below is only
+				 * there to satisfy the binding and is ignored.
+				 * Latencies follow the downstream "fpc-def"
+				 * level this mirrors.
+				 */
+				compatible = "qcom,idle-state-hyp-psci",
+					     "arm,idle-state";
+				idle-state-name = "hyp-power-collapse";
+				arm,psci-suspend-param = <0x00000000>;
+				entry-latency-us = <40>;
+				exit-latency-us = <120>;
+				min-residency-us = <400>;
 			};
 		};
 	};
