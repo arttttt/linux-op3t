@@ -268,8 +268,16 @@ static int psci_dt_cpu_init_topology(struct cpuidle_driver *drv,
 				     struct psci_cpuidle_data *data,
 				     unsigned int state_count, int cpu)
 {
-	/* Currently limit the hierarchical topology to be used in OSI mode. */
-	if (!psci_has_osi_support())
+	/*
+	 * The hierarchical topology used to be limited to OSI mode. It is
+	 * useful in platform-coordinated mode too: what it really provides is
+	 * the accounting that lets only the last CPU leaving a domain request
+	 * that domain's state, and firmware that refuses a cluster state while
+	 * other cores are still running needs exactly that. Only attach when
+	 * the DT actually describes the topology - without power-domains on
+	 * the CPUs there is nothing to attach to and this returns harmlessly.
+	 */
+	if (!of_property_present(of_cpu_device_node_get(cpu), "power-domains"))
 		return 0;
 
 	data->dev = dt_idle_attach_cpu(cpu, "psci");

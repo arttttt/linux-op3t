@@ -66,17 +66,29 @@ static int psci_pd_init(struct device_node *np, bool use_osi)
 	pd->flags |= GENPD_FLAG_IRQ_SAFE | GENPD_FLAG_CPU_DOMAIN;
 
 	/*
-	 * Allow power off when OSI has been successfully enabled.
-	 * On a PREEMPT_RT based configuration the domain idle states are
-	 * supported, but only during system-wide suspend.
+	 * Allow power off in OSI mode, and in platform-coordinated mode too.
+	 *
+	 * PC mode is supposed to mean the firmware coordinates for us, so the
+	 * OS can request the deepest state it can tolerate and let the
+	 * platform sort out the rest. Some firmware does not: msm8996 refuses
+	 * every cluster and system state a single CPU asks for while its
+	 * siblings are still running - hundreds of thousands of rejections
+	 * with no entries - yet it accepts the very same composite state ID on
+	 * the rare occasion the cluster happens to be idle already. It wants a
+	 * request that is already consistent, not a wish.
+	 *
+	 * That is exactly what genpd produces: it tracks which CPUs of a domain
+	 * are idle and only the last one leaving gets a domain state to pass
+	 * down. The vendor kernel does the same thing by hand, gating the
+	 * cluster level on a cpumask of children that have gone to sleep.
+	 *
+	 * The call itself is identical either way - CPU_SUSPEND with a
+	 * composite state ID - so there is nothing OSI-specific about letting
+	 * the domain power off here.
 	 */
-	if (use_osi) {
-		pd->power_off = psci_pd_power_off;
-		if (IS_ENABLED(CONFIG_PREEMPT_RT))
-			pd->flags |= GENPD_FLAG_RPM_ALWAYS_ON;
-	} else {
-		pd->flags |= GENPD_FLAG_ALWAYS_ON;
-	}
+	pd->power_off = psci_pd_power_off;
+	if (use_osi && IS_ENABLED(CONFIG_PREEMPT_RT))
+		pd->flags |= GENPD_FLAG_RPM_ALWAYS_ON;
 
 	/* Use governor for CPU PM domains if it has some states to manage. */
 	pd_gov = pd->states ? &pm_domain_cpu_gov : NULL;
@@ -172,9 +184,16 @@ static int psci_cpuidle_domain_probe(struct platform_device *pdev)
 	if (ret)
 		goto remove_pd;
 
-	/* let's try to enable OSI. */
+	/*
+	 * Try to enable OSI, but do not give up the topology if the firmware
+	 * says no. Plenty of firmware advertises the OSI feature bit and then
+	 * fails SET_SUSPEND_MODE anyway (msm8996 returns NOT_SUPPORTED), and
+	 * PC mode is the PSCI reset default in any case - so a failure here
+	 * leaves us in exactly the mode we would have fallen back to, with a
+	 * domain hierarchy that works the same way.
+	 */
 	ret = psci_set_osi_mode(use_osi);
-	if (ret)
+	if (ret && use_osi)
 		goto remove_pd;
 
 	pr_info("Initialized CPU PM domain topology using %s mode\n",

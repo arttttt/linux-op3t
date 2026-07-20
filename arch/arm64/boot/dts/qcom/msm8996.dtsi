@@ -48,7 +48,9 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1 &CLUSTER_SLEEP_0 &CLUSTER_SLEEP_1 &SYSTEM_SLEEP_0 &SYSTEM_SLEEP_1>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
+			power-domains = <&CPU_PD0>;
+			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -67,7 +69,9 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x1>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1 &CLUSTER_SLEEP_0 &CLUSTER_SLEEP_1 &SYSTEM_SLEEP_0 &SYSTEM_SLEEP_1>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
+			power-domains = <&CPU_PD1>;
+			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -81,7 +85,9 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1 &CLUSTER_SLEEP_0 &CLUSTER_SLEEP_1 &SYSTEM_SLEEP_0 &SYSTEM_SLEEP_1>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
+			power-domains = <&CPU_PD2>;
+			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -100,7 +106,9 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
-			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1 &CLUSTER_SLEEP_0 &CLUSTER_SLEEP_1 &SYSTEM_SLEEP_0 &SYSTEM_SLEEP_1>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
+			power-domains = <&CPU_PD3>;
+			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -163,16 +171,23 @@
 				min-residency-us = <400>;
 			};
 
+		};
+
+		/*
+		 * Cluster and system states are not something a single CPU may
+		 * ask for: the firmware rejects them outright while sibling
+		 * cores are still running. They belong to the power domains
+		 * below, so that only the last CPU leaving a domain requests
+		 * them - which is what the vendor kernel arranges by hand.
+		 *
+		 * Composition follows downstream: affinity level in bits 25:24,
+		 * the L2 mode in the second nibble, the CPU mode in the first.
+		 * StateType stays clear, since this firmware refuses every
+		 * request that sets it.
+		 */
+		domain-idle-states {
 			CLUSTER_SLEEP_0: cluster-sleep-0 {
-				/*
-				 * L2 retention for the cluster, composed the way
-				 * the downstream kernel does it: affinity level 1
-				 * in bits 25:24, the L2 mode in the second nibble,
-				 * the CPU mode in the first. StateType is left
-				 * clear because this firmware refuses anything
-				 * with it set.
-				 */
-				compatible = "arm,idle-state";
+				compatible = "domain-idle-state";
 				idle-state-name = "cluster-l2-gdhs";
 				arm,psci-suspend-param = <0x01000034>;
 				entry-latency-us = <300>;
@@ -181,7 +196,7 @@
 			};
 
 			CLUSTER_SLEEP_1: cluster-sleep-1 {
-				compatible = "arm,idle-state";
+				compatible = "domain-idle-state";
 				idle-state-name = "cluster-l2-pc";
 				arm,psci-suspend-param = <0x01000044>;
 				entry-latency-us = <600>;
@@ -191,7 +206,7 @@
 
 			SYSTEM_SLEEP_0: system-sleep-0 {
 				/* Affinity level 2: the CBF/L3 and system rails. */
-				compatible = "arm,idle-state";
+				compatible = "domain-idle-state";
 				idle-state-name = "system-retention";
 				arm,psci-suspend-param = <0x02002344>;
 				entry-latency-us = <1500>;
@@ -201,7 +216,7 @@
 
 			SYSTEM_SLEEP_1: system-sleep-1 {
 				/* Deepest: the level downstream marks notify-rpm. */
-				compatible = "arm,idle-state";
+				compatible = "domain-idle-state";
 				idle-state-name = "system-pc";
 				arm,psci-suspend-param = <0x02003444>;
 				entry-latency-us = <5500>;
@@ -526,6 +541,49 @@
 	psci {
 		compatible = "arm,psci-1.0";
 		method = "smc";
+
+		/*
+		 * Two clusters of two Kryo cores each, sharing an L2, both
+		 * under the system domain that covers the CBF/L3 and the
+		 * system rails. Each level only requests its state once every
+		 * CPU below it has gone idle.
+		 */
+		CPU_PD0: power-domain-cpu0 {
+			#power-domain-cells = <0>;
+			power-domains = <&CLUSTER_PD0>;
+		};
+
+		CPU_PD1: power-domain-cpu1 {
+			#power-domain-cells = <0>;
+			power-domains = <&CLUSTER_PD0>;
+		};
+
+		CPU_PD2: power-domain-cpu2 {
+			#power-domain-cells = <0>;
+			power-domains = <&CLUSTER_PD1>;
+		};
+
+		CPU_PD3: power-domain-cpu3 {
+			#power-domain-cells = <0>;
+			power-domains = <&CLUSTER_PD1>;
+		};
+
+		CLUSTER_PD0: power-domain-cluster0 {
+			#power-domain-cells = <0>;
+			power-domains = <&SYSTEM_PD>;
+			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
+		};
+
+		CLUSTER_PD1: power-domain-cluster1 {
+			#power-domain-cells = <0>;
+			power-domains = <&SYSTEM_PD>;
+			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
+		};
+
+		SYSTEM_PD: power-domain-system {
+			#power-domain-cells = <0>;
+			domain-idle-states = <&SYSTEM_SLEEP_0>, <&SYSTEM_SLEEP_1>;
+		};
 	};
 
 	rpm: remoteproc {
