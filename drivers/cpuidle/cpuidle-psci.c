@@ -75,18 +75,26 @@ static __cpuidle int __psci_enter_domain_idle_state(struct cpuidle_device *dev,
 		state = states[idx];
 
 	/*
-	 * Diagnostic breadcrumb: log the exact composed state only when a
-	 * domain (cluster/system) state is being requested, i.e. when it
-	 * differs from this CPU's own deepest state. This is the last thing
-	 * the kernel does before the cluster may lose power, so if it does
-	 * not come back the pstore panic/oops record ends here, naming the
-	 * value that killed it.
+	 * A non-zero domain state means genpd found this CPU to be the last of
+	 * its cluster to go idle and composed a cluster (or system) state onto
+	 * the request - so entering it can take the whole cluster's power, not
+	 * just this core's.
+	 *
+	 * Fire the cluster PM notifiers around that, nested inside the per-CPU
+	 * ones already taken above. The generic arm64 path skips this because
+	 * on well-behaved firmware nothing cluster-scoped needs saving, but
+	 * the vendor kernel does it (cluster_notify -> cpu_cluster_pm_enter on
+	 * every reset-level cluster entry), and msm8996 resets the moment a
+	 * cluster state reaches firmware without it - consistent with some
+	 * cluster-level state going unsaved.
 	 */
 	if (state != states[idx])
-		pr_emerg("cpu%d entering domain state %#x\n",
-			 dev->cpu, state);
+		cpu_cluster_pm_enter();
 
 	ret = psci_cpu_suspend_enter(state) ? -1 : idx;
+
+	if (state != states[idx])
+		cpu_cluster_pm_exit();
 
 	if (s2idle)
 		dev_pm_genpd_resume(pd_dev);
