@@ -185,16 +185,20 @@ static int psci_cpuidle_domain_probe(struct platform_device *pdev)
 		goto remove_pd;
 
 	/*
-	 * Try to enable OSI, but do not give up the topology if the firmware
-	 * says no. Plenty of firmware advertises the OSI feature bit and then
-	 * fails SET_SUSPEND_MODE anyway (msm8996 returns NOT_SUPPORTED), and
-	 * PC mode is the PSCI reset default in any case - so a failure here
-	 * leaves us in exactly the mode we would have fallen back to, with a
-	 * domain hierarchy that works the same way.
+	 * Try to enable OSI, but keep the topology if the firmware says no.
+	 * The OSI feature bit is not always truthful: msm8996 advertises it
+	 * and then fails SET_SUSPEND_MODE with NOT_SUPPORTED. Tearing the
+	 * domains down over that is wasteful, because the fallback - platform
+	 * coordinated mode - is the PSCI reset default and drives the very
+	 * same CPU_SUSPEND call with the very same composite state ID. What
+	 * the hierarchy contributes is the accounting that stops a CPU asking
+	 * for a cluster state while its siblings are awake, and that is worth
+	 * having in either mode.
 	 */
-	ret = psci_set_osi_mode(use_osi);
-	if (ret && use_osi)
-		goto remove_pd;
+	if (use_osi && psci_set_osi_mode(true)) {
+		pr_info("OSI refused by firmware, staying in PC mode\n");
+		use_osi = false;
+	}
 
 	pr_info("Initialized CPU PM domain topology using %s mode\n",
 		use_osi ? "OSI" : "PC");
