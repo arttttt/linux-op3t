@@ -143,24 +143,15 @@
 			entry-method = "psci";
 
 			CPU_SLEEP_0: cpu-sleep-0 {
-				compatible = "arm,idle-state";
-				idle-state-name = "standalone-power-collapse";
-				arm,psci-suspend-param = <0x00000004>;
-				entry-latency-us = <130>;
-				exit-latency-us = <80>;
-				min-residency-us = <300>;
-			};
-
-			CPU_SLEEP_1: cpu-sleep-1 {
 				/*
-				 * Deeper collapse reached through the Qualcomm
-				 * vendor SMC rather than CPU_SUSPEND, which this
-				 * firmware refuses for anything with the
-				 * power-down StateType set. The call takes no
-				 * arguments, so the suspend-param below is only
-				 * there to satisfy the binding and is ignored.
-				 * Latencies follow the downstream "fpc-def"
-				 * level this mirrors.
+				 * The Qualcomm vendor SMC, mirroring the level
+				 * downstream calls "fpc-def". It takes no
+				 * arguments, so the suspend-param below only
+				 * satisfies the binding and is ignored.
+				 *
+				 * It comes first because it really is the
+				 * shallower of the two: 40us to enter against
+				 * 130us for the standalone collapse below.
 				 */
 				compatible = "qcom,idle-state-hyp-psci",
 					     "arm,idle-state";
@@ -168,7 +159,24 @@
 				arm,psci-suspend-param = <0x00000000>;
 				entry-latency-us = <40>;
 				exit-latency-us = <120>;
-				min-residency-us = <400>;
+				min-residency-us = <300>;
+			};
+
+			CPU_SLEEP_1: cpu-sleep-1 {
+				/*
+				 * Must stay last: the domain code overrides the
+				 * deepest state's enter callback to hand the
+				 * composed cluster or system state down, so that
+				 * state has to be one the firmware reaches
+				 * through CPU_SUSPEND - which the vendor call
+				 * above is not.
+				 */
+				compatible = "arm,idle-state";
+				idle-state-name = "standalone-power-collapse";
+				arm,psci-suspend-param = <0x00000004>;
+				entry-latency-us = <130>;
+				exit-latency-us = <80>;
+				min-residency-us = <800>;
 			};
 
 		};
