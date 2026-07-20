@@ -878,8 +878,50 @@
 		};
 
 		rpm_msg_ram: sram@68000 {
-			compatible = "qcom,rpm-msg-ram";
+			compatible = "qcom,rpm-msg-ram", "mmio-sram";
 			reg = <0x00068000 0x6000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0x00068000 0x6000>;
+
+			apss_mpm: sram@1b8 {
+				reg = <0x1b8 0x48>;
+			};
+		};
+
+		/*
+		 * MSM Power Manager: the always-on block that watches for
+		 * wakeups while the APSS is asleep and replays them to the GIC.
+		 *
+		 * It is what makes cluster and system idle states survivable.
+		 * A CPU-level collapse leaves the GIC powered by the rest of
+		 * the cluster, so the core wakes on its own; once the cluster
+		 * goes down its redistributor goes with it and only the MPM is
+		 * left to notice an interrupt. The vendor kernel programs it on
+		 * every deep entry - msm_mpm_enter_sleep() next to the RPM
+		 * sleep-set write - which is why it needs no GIC trickery.
+		 *
+		 * Addresses and pin map come from the downstream msm8996-pm.dtsi
+		 * (vmpm at 0x681b8 in RPM MSG RAM, IPC bit 1 of the APCS
+		 * mailbox, 96 pins, GIC_SPI 171).
+		 */
+		mpm: interrupt-controller {
+			compatible = "qcom,mpm";
+			qcom,rpm-msg-ram = <&apss_mpm>;
+			interrupts = <GIC_SPI 171 IRQ_TYPE_EDGE_RISING>;
+			mboxes = <&apcs_glb 1>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			#power-domain-cells = <0>;
+			interrupt-parent = <&intc>;
+			qcom,mpm-pin-count = <96>;
+			qcom,mpm-pin-map = <2 216>,   /* tsens upper/lower */
+					   <52 275>,  /* qmp usb3 lfps rxterm */
+					   <79 379>,  /* qusb2phy dmse hv prim */
+					   <80 384>,  /* qusb2phy dmse hv sec */
+					   <81 379>,  /* qusb2phy dpse hv prim */
+					   <82 384>,  /* qusb2phy dpse hv sec */
+					   <87 358>;  /* spmi periph */
 		};
 
 		qfprom@74000 {
