@@ -74,6 +74,18 @@ static __cpuidle int __psci_enter_domain_idle_state(struct cpuidle_device *dev,
 	if (!state)
 		state = states[idx];
 
+	/*
+	 * Diagnostic breadcrumb: log the exact composed state only when a
+	 * domain (cluster/system) state is being requested, i.e. when it
+	 * differs from this CPU's own deepest state. This is the last thing
+	 * the kernel does before the cluster may lose power, so if it does
+	 * not come back the pstore panic/oops record ends here, naming the
+	 * value that killed it.
+	 */
+	if (state != states[idx])
+		pr_emerg("cpu%d entering domain state %#x\n",
+			 dev->cpu, state);
+
 	ret = psci_cpu_suspend_enter(state) ? -1 : idx;
 
 	if (s2idle)
