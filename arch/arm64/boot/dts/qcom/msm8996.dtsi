@@ -724,22 +724,6 @@
 			no-map;
 		};
 
-		/*
-		 * Diagnostic only. A persistent-RAM log so a crash that
-		 * survives as a warm reset leaves something to read afterwards.
-		 * Placed right after mba_mem, next to the 0x91500000 the
-		 * downstream kernel uses for the same purpose - i.e. an area
-		 * known to survive reset on this hardware. Both the kernel that
-		 * crashes and the kernel that reads the log back must carry an
-		 * identical node, or the region is either clobbered or unparsed.
-		 */
-		ramoops@91700000 {
-			compatible = "ramoops";
-			reg = <0x0 0x91700000 0x0 0x100000>;
-			console-size = <0x40000>;
-			record-size = <0x20000>;
-			pmsg-size = <0x20000>;
-		};
 	};
 
 	smem {
