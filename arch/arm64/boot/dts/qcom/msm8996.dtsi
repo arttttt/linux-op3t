@@ -212,25 +212,7 @@
 				min-residency-us = <4000>;
 			};
 
-			SYSTEM_SLEEP_0: system-sleep-0 {
-				/* Affinity level 2: the CBF/L3 and system rails. */
-				compatible = "domain-idle-state";
-				idle-state-name = "system-retention";
-				arm,psci-suspend-param = <0x02002344>;
-				entry-latency-us = <1500>;
-				exit-latency-us = <1500>;
-				min-residency-us = <7000>;
-			};
 
-			SYSTEM_SLEEP_1: system-sleep-1 {
-				/* Deepest: the level downstream marks notify-rpm. */
-				compatible = "domain-idle-state";
-				idle-state-name = "system-pc";
-				arm,psci-suspend-param = <0x02003444>;
-				entry-latency-us = <5500>;
-				exit-latency-us = <5500>;
-				min-residency-us = <15000>;
-			};
 		};
 	};
 
@@ -576,21 +558,27 @@
 			power-domains = <&CLUSTER_PD1>;
 		};
 
+		/*
+		 * Both clusters sit under the MPM, which is a power domain in
+		 * its own right: its power_off arms the wakeup hardware and
+		 * hands vMPM to the RPM. Parenting the clusters to it is what
+		 * makes that happen at the right moment - once the last CPU of
+		 * the last cluster is idle, genpd walks up and switches the
+		 * MPM off, arming it just before the CPU issues the suspend
+		 * call. The vendor kernel does the same by hand, calling
+		 * msm_mpm_enter_sleep() from cluster_configure() before the
+		 * composed state ID goes down to firmware.
+		 */
 		CLUSTER_PD0: power-domain-cluster0 {
 			#power-domain-cells = <0>;
-			power-domains = <&SYSTEM_PD>;
+			power-domains = <&mpm>;
 			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
 		};
 
 		CLUSTER_PD1: power-domain-cluster1 {
 			#power-domain-cells = <0>;
-			power-domains = <&SYSTEM_PD>;
+			power-domains = <&mpm>;
 			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
-		};
-
-		SYSTEM_PD: power-domain-system {
-			#power-domain-cells = <0>;
-			domain-idle-states = <&SYSTEM_SLEEP_0>, <&SYSTEM_SLEEP_1>;
 		};
 	};
 
