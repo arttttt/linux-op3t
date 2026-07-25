@@ -952,9 +952,24 @@ void kgdb_roundup_cpus(void)
 /*
  * Main handler for inter-processor interrupts
  */
+/*
+ * Set while an IPI has been raised for a CPU but not yet taken by it.
+ *
+ * A cluster idle state powers down hardware shared by the whole cluster, and on
+ * msm8996 an SGI raised just before that does not survive it: the target core
+ * never takes the interrupt and never comes back. The vendor kernel guards the
+ * same window - lpm-levels.c refuses a cluster level when is_IPI_pending() says
+ * any of its cores has one in flight - so keep the same book here and let
+ * cpuidle ask.
+ */
+DEFINE_PER_CPU(bool, pending_ipi);
+EXPORT_PER_CPU_SYMBOL_GPL(pending_ipi);
+
 static void do_handle_IPI(int ipinr)
 {
 	unsigned int cpu = smp_processor_id();
+
+	this_cpu_write(pending_ipi, false);
 
 	if ((unsigned)ipinr < NR_IPI)
 		trace_ipi_entry(ipi_types[ipinr]);
@@ -1019,6 +1034,11 @@ static irqreturn_t ipi_handler(int irq, void *data)
 
 static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 {
+	unsigned int cpu;
+
+	for_each_cpu(cpu, target)
+		per_cpu(pending_ipi, cpu) = true;
+
 	trace_ipi_raise(target, ipi_types[ipinr]);
 	__ipi_send_mask(ipi_desc[ipinr], target);
 }
