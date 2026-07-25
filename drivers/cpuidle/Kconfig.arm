@@ -32,6 +32,17 @@ config ARM_PSCI_CPUIDLE
 	    only the idle states defined per CPU are available, but not the ones
 	    being shared among a group of CPUs (aka cluster idle states).
 
+config ARM_MSM8996_CPUIDLE
+	bool "Qualcomm msm8996 cluster and system idle"
+	depends on ARM_PSCI_CPUIDLE && ARM64
+	default y if ARCH_QCOM
+	help
+	  Cluster and system idle states for msm8996. The firmware on this SoC
+	  will not act on a composed state id assembled the way the generic
+	  hierarchical path assembles it, so the last core out of a cluster does
+	  the accounting here instead, with a spinlock and a cpumask, the way the
+	  vendor kernel does. Without this only per-core idle is available.
+
 config ARM_PSCI_CPUIDLE_DOMAIN
 	bool "PSCI CPU idle Domain"
 	depends on ARM_PSCI_CPUIDLE

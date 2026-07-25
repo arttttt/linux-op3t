@@ -27,6 +27,7 @@
 
 #include <asm/cpuidle.h>
 
+#include "cpuidle-msm8996.h"
 #include "cpuidle-psci.h"
 #include "dt_idle_states.h"
 #include "dt_idle_genpd.h"
@@ -355,6 +356,16 @@ static int psci_dt_cpu_init_idle(struct device *dev, struct cpuidle_driver *drv,
 	ret = psci_dt_cpu_init_topology(drv, data, state_count, cpu);
 	if (ret < 0)
 		return ret;
+
+	/*
+	 * No genpd topology to attach to. On msm8996 that is deliberate: the
+	 * firmware wants a consistent composed request without the machinery
+	 * genpd puts on the idle path, so a small SoC driver does the last-man
+	 * accounting instead. It takes over the deepest state's enter callback.
+	 */
+	if (!data->dev)
+		msm8996_cpuidle_attach(drv, state_count,
+				       psci_states[state_count - 1]);
 
 	/* Idle states parsed correctly, store them in the per-cpu struct. */
 	data->psci_states = psci_states;
