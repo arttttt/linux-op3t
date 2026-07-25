@@ -49,8 +49,6 @@
 			reg = <0x0 0x0>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
-			power-domains = <&CPU_PD0>;
-			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -70,8 +68,6 @@
 			reg = <0x0 0x1>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
-			power-domains = <&CPU_PD1>;
-			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 0>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -86,8 +82,6 @@
 			reg = <0x0 0x100>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
-			power-domains = <&CPU_PD2>;
-			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -107,8 +101,6 @@
 			reg = <0x0 0x101>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CPU_SLEEP_1>;
-			power-domains = <&CPU_PD3>;
-			power-domain-names = "psci";
 			capacity-dmips-mhz = <1024>;
 			clocks = <&kryocc 1>;
 			interconnects = <&cbf MASTER_CBF_M4M &cbf SLAVE_CBF_M4M>;
@@ -157,8 +149,17 @@
 					     "arm,idle-state";
 				idle-state-name = "hyp-power-collapse";
 				arm,psci-suspend-param = <0x00000000>;
+				/*
+				 * Mirrors the vendor kernel's fpc-def level: 40us to
+				 * wake, 120us of overhead. It has to stay clearly
+				 * cheaper than the PSCI collapse below, because that
+				 * is what makes the governor prefer it - downstream
+				 * picks this level about ten times as often, and the
+				 * cluster levels are only reachable through the other
+				 * one, which keeps traffic off that path.
+				 */
 				entry-latency-us = <40>;
-				exit-latency-us = <120>;
+				exit-latency-us = <80>;
 				min-residency-us = <300>;
 			};
 
@@ -184,9 +185,20 @@
 				 */
 				compatible = "arm,idle-state";
 				idle-state-name = "standalone-power-collapse";
-				arm,psci-suspend-param = <0x40000004>;
-				entry-latency-us = <130>;
-				exit-latency-us = <80>;
+				/*
+				 * The value downstream actually composes. bit 30 is
+				 * NOT set: it comes from a CPU level's
+				 * "qcom,is-reset", and msm8996-pm.dtsi sets that
+				 * only on cluster levels. This firmware refuses
+				 * every request that carries bit 30, so the vendor
+				 * encoding is the only one it accepts - context is
+				 * saved regardless, see psci_force_ctx_save.
+				 */
+				arm,psci-suspend-param = <0x00000004>;
+				/* The vendor kernel's fpc level: 80us to wake, 210us of
+				 * overhead - twice the cost of the hyp call above. */
+				entry-latency-us = <80>;
+				exit-latency-us = <130>;
 				min-residency-us = <800>;
 				local-timer-stop;
 			};
@@ -209,19 +221,25 @@
 			CLUSTER_SLEEP_0: cluster-sleep-0 {
 				compatible = "domain-idle-state";
 				idle-state-name = "cluster-l2-gdhs";
-				arm,psci-suspend-param = <0x41000034>;
-				entry-latency-us = <300>;
-				exit-latency-us = <500>;
-				min-residency-us = <2500>;
+				/* downstream: affinity 1, L2 mode 3, CPU mode 4, no bit 30 */
+				arm,psci-suspend-param = <0x01000034>;
+				/* The vendor kernel's l2-gdhs: 90us to wake, 180us of
+				 * overhead. */
+				entry-latency-us = <90>;
+				exit-latency-us = <180>;
+				min-residency-us = <1000>;
 			};
 
 			CLUSTER_SLEEP_1: cluster-sleep-1 {
 				compatible = "domain-idle-state";
 				idle-state-name = "cluster-l2-pc";
-				arm,psci-suspend-param = <0x41000044>;
-				entry-latency-us = <600>;
-				exit-latency-us = <800>;
-				min-residency-us = <4000>;
+				/* downstream: affinity 1, L2 mode 4, CPU mode 4, no bit 30 */
+				arm,psci-suspend-param = <0x01000044>;
+				/* The vendor kernel's l2-fpc: 700us to wake, 1000us of
+				 * overhead - the deepest cluster level. */
+				entry-latency-us = <700>;
+				exit-latency-us = <1000>;
+				min-residency-us = <5000>;
 			};
 
 
@@ -571,26 +589,40 @@
 		};
 
 		/*
-		 * Both clusters sit under the MPM, which is a power domain in
-		 * its own right: its power_off arms the wakeup hardware and
-		 * hands vMPM to the RPM. Parenting the clusters to it is what
-		 * makes that happen at the right moment - once the last CPU of
-		 * the last cluster is idle, genpd walks up and switches the
-		 * MPM off, arming it just before the CPU issues the suspend
-		 * call. The vendor kernel does the same by hand, calling
-		 * msm_mpm_enter_sleep() from cluster_configure() before the
-		 * composed state ID goes down to firmware.
+		 * The clusters deliberately have NO parent domain.
+		 *
+		 * They used to sit under the MPM, on the reasoning that its
+		 * power_off arms the wakeup hardware the way the vendor kernel
+		 * does. Reading the vendor kernel again says otherwise: it only
+		 * calls msm_mpm_enter_sleep() from cluster_configure() when the
+		 * level carries "qcom,notify-rpm", which msm8996-pm.dtsi sets
+		 * on the system levels alone - never on the cluster-only
+		 * pwr-l2-fpc/perf-l2-fpc levels we are entering here. Arming the
+		 * MPM for a plain cluster collapse means half a system sleep:
+		 * wakeups rerouted to hardware the RPM was never told about.
 		 */
 		CLUSTER_PD0: power-domain-cluster0 {
 			#power-domain-cells = <0>;
-			power-domains = <&mpm>;
-			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
+			/*
+			 * GDHS only for now. Offering both, the cluster collapsed
+			 * and resumed twenty times before the box went down, and
+			 * the deeper of the two - PC, with the L2 actually losing
+			 * power - is the obvious suspect for the one that did not
+			 * come back. Retention first; earn the power-down after.
+			 */
+			domain-idle-states = <&CLUSTER_SLEEP_0>;
 		};
 
 		CLUSTER_PD1: power-domain-cluster1 {
 			#power-domain-cells = <0>;
-			power-domains = <&mpm>;
-			domain-idle-states = <&CLUSTER_SLEEP_0>, <&CLUSTER_SLEEP_1>;
+			/*
+			 * GDHS only for now. Offering both, the cluster collapsed
+			 * and resumed twenty times before the box went down, and
+			 * the deeper of the two - PC, with the L2 actually losing
+			 * power - is the obvious suspect for the one that did not
+			 * come back. Retention first; earn the power-down after.
+			 */
+			domain-idle-states = <&CLUSTER_SLEEP_0>;
 		};
 	};
 
